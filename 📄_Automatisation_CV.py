@@ -24,36 +24,38 @@ if uploaded_cv is not None and template_path:
     # Bouton pour générer le fichier
     if st.button("Lancer le traitement"):
         output_path = None  # Initialiser output_path avant le bloc try
-        try:
-            # Lire le contenu du fichier uploadé
-            file_content = uploaded_cv.read()
-            file_name = uploaded_cv.name
-            
-            # Extraire le texte du CV
-            cv_content = read_cv(file_content=file_content, file_name=file_name)
-            
-            if cv_content and not cv_content.startswith("Type de fichier non pris en charge"):
-                extracted_info = extract_info_from_cv(cv_content)
-
-                output_path = f"{uploaded_cv.name.split('.')[0]}_parlym.docx"
-
-                fill_word_template_with_lists(template_path, output_path, extracted_info)
-
-                st.success(f"Fichier généré avec succès : {output_path}")
-
-                # bouton pour télécharger le fichier généré
-                with open(output_path, "rb") as result_file:
-                    st.download_button(
-                        label="Télécharger le fichier généré",
-                        data=result_file,
-                        file_name=output_path,
-                    )
-            else:
-                st.error(f"Erreur lors de la lecture du fichier: {cv_content}")
+        
+        with st.spinner("Traitement en cours..."):
+            try:
+                # Lire le contenu du fichier uploadé
+                file_content = uploaded_cv.read()
+                file_name = uploaded_cv.name
                 
-        except Exception as e:
-            st.error(f"Une erreur s'est produite : {str(e)}")
-        finally:
-            # Nettoyer le fichier de sortie si il existe
-            if output_path and os.path.exists(output_path):
-                os.remove(output_path)
+                # Extraire le texte du CV
+                cv_content = read_cv(file_content=file_content, file_name=file_name)
+                
+                if cv_content and not cv_content.startswith("Type de fichier non pris en charge"):
+                    extracted_info = extract_info_from_cv(cv_content)
+
+                    output_path = f"{uploaded_cv.name.split('.')[0]}_parlym.docx"
+
+                    fill_word_template_with_lists(template_path, output_path, extracted_info)
+
+                    st.success(f"Fichier généré avec succès : {output_path}")
+
+                    # bouton pour télécharger le fichier généré
+                    with open(output_path, "rb") as result_file:
+                        st.download_button(
+                            label="Télécharger le fichier généré",
+                            data=result_file,
+                            file_name=output_path,
+                        )
+                else:
+                    st.error(f"Erreur lors de la lecture du fichier: {cv_content}")
+                    
+            except Exception as e:
+                st.error(f"Une erreur s'est produite : {str(e)}")
+            finally:
+                # Nettoyer le fichier de sortie si il existe
+                if output_path and os.path.exists(output_path):
+                    os.remove(output_path)
