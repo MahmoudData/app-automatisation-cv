@@ -16,6 +16,7 @@ env/
 # Fichiers générés par votre app
 *.pdf
 *.docx
+!template_cv_p.docx
 uploads/
 output/
 temp/
