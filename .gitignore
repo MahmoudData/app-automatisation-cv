@@ -1,0 +1,25 @@
+# Secrets et clés API
+.streamlit/secrets.toml
+.env
+*.env
+
+# Fichiers Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environnement virtuel
+venv/
+.venv/
+env/
+
+# Fichiers générés par votre app
+*.pdf
+*.docx
+uploads/
+output/
+temp/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
