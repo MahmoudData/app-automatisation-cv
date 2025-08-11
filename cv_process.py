@@ -5,19 +5,55 @@ import os
 from PyPDF2 import PdfReader
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT  # Pour aligner les paragraphes
 from docx.shared import Inches  # Pour définir les positions en pouces
-from docx2pdf import convert
-import pythoncom
+import docx2txt
 import streamlit as st
+import tempfile
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 
+def extract_text_from_docx(file_content=None, file_path=None):
+    """Extrait le texte d'un fichier DOCX."""
+    try:
+        if file_content:
+            # Si on a le contenu du fichier (pour uploaded files)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp_file:
+                tmp_file.write(file_content)
+                tmp_file.flush()
+                
+                # Méthode 1: Utiliser docx2txt
+                try:
+                    text = docx2txt.process(tmp_file.name)
+                    os.unlink(tmp_file.name)
+                    return text
+                except Exception:
+                    # Fallback avec python-docx
+                    doc = Document(tmp_file.name)
+                    text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+                    os.unlink(tmp_file.name)
+                    return text
+        else:
+            # Si on a un chemin de fichier
+            try:
+                text = docx2txt.process(file_path)
+                return text
+            except Exception:
+                # Fallback avec python-docx
+                doc = Document(file_path)
+                text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+                return text
+    except Exception as e:
+        st.error(f"Erreur lors de l'extraction du texte DOCX: {str(e)}")
+        return None
+
+
 def convert_word_to_pdf(docx_path):
-    """Convertit un fichier .docx en .pdf et retourne le chemin du fichier PDF généré."""
-    pythoncom.CoInitialize()  # Pour éviter l'erreur COM
-    pdf_path = docx_path.replace(".docx", ".pdf")
-    convert(docx_path, pdf_path)
-    return pdf_path
+    """
+    OBSOLÈTE: Cette fonction n'est plus utilisée sur Streamlit Cloud.
+    La conversion directe DOCX->PDF n'est pas supportée sans pywin32.
+    """
+    st.warning("⚠️ Conversion PDF non disponible sur cette plateforme. Le fichier DOCX sera traité directement.")
+    return None
 
 
 def extract_text_from_pdf(pdf_path):
@@ -27,20 +63,44 @@ def extract_text_from_pdf(pdf_path):
     return cv_text.strip()
 
 
-def read_cv(file_path):
-    """Lit un CV en format .docx ou .pdf en convertissant d'abord en PDF si nécessaire."""
-    _, ext = os.path.splitext(file_path)
-    ext = ext.lower()
+def read_cv(file_path=None, file_content=None, file_name=None):
+    """
+    Lit un CV en format .docx ou .pdf.
     
-    if ext == ".docx":
-        pdf_path = convert_word_to_pdf(file_path)  # Convertit en PDF
-        return extract_text_from_pdf(pdf_path)  # Extrait le texte du PDF
+    Arguments:
+        file_path (str): Chemin vers le fichier (pour fichiers locaux)
+        file_content (bytes): Contenu du fichier (pour uploaded files)
+        file_name (str): Nom du fichier pour déterminer l'extension
+    """
+    if file_path:
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        if ext == ".docx":
+            return extract_text_from_docx(file_path=file_path)
+        elif ext == ".pdf":
+            return extract_text_from_pdf(file_path)
+        else:
+            return "Type de fichier non pris en charge. Veuillez fournir un fichier .docx ou .pdf."
     
-    elif ext == ".pdf":
-        return extract_text_from_pdf(file_path)  # Extrait directement le texte
+    elif file_content and file_name:
+        ext = os.path.splitext(file_name.lower())[1]
+        
+        if ext == ".docx":
+            return extract_text_from_docx(file_content=file_content)
+        elif ext == ".pdf":
+            # Pour les PDF uploadés
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_file.write(file_content)
+                tmp_file.flush()
+                text = extract_text_from_pdf(tmp_file.name)
+                os.unlink(tmp_file.name)
+                return text
+        else:
+            return "Type de fichier non pris en charge. Veuillez fournir un fichier .docx ou .pdf."
     
     else:
-        return "Type de fichier non pris en charge. Veuillez fournir un fichier .docx ou .pdf."
+        return "Paramètres insuffisants pour lire le fichier."
     
 
 def extract_info_from_cv(cv_text):
