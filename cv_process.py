@@ -123,12 +123,12 @@ def extract_info_from_cv(cv_text):
                 "EXPERTISE": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Les domaines principaux d'expertise (par exemple, Bâtiment, Industrie, Oil & Gas)."
+                    "description": "Les activités et compétences spécifiques (par exemple, Etude de constructibilité, Résolution des problématiques, Leadership)."
                 },
                 "SECTEUR": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Les activités et compétences spécifiques (par exemple, Etude de constructibilité, Résolution des problématiques, Leadership)."
+                    "description": "Les domaines principaux d'expertise (par exemple, Bâtiment, Industrie, Oil & Gas)."
                 },
                 "METHODOLOGIE": {
                     "type": "array",
@@ -203,7 +203,7 @@ def extract_info_from_cv(cv_text):
 
     # Appel à l'API OpenAI avec Function Calling
     response = openai.chat.completions.create(
-        model="gpt-5",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "Tu es un assistant qui aide à extraire les informations des CV."},
             {"role": "user", "content": cv_text}
