@@ -170,8 +170,8 @@ def extract_info_from_cv(cv_text):
                         "type": "object",
                         "properties": {
                             "CLIENT_NOM": {"type": "string", "description": "Nom du client."},
-                            "DATE_DEBUT": {"type": "string", "description": "Date de début du projet."},
-                            "DATE_FIN": {"type": "string", "description": "Date de fin du projet."},
+                            "DATE_DEBUT": {"type": "string", "description": "Date de début du projet au format MM/AAAA."},
+                            "DATE_FIN": {"type": "string", "description": "Date de fin du projet au format MM/AAAA."},
                             "INTITULE_POSTE": {"type": "string", "description": "Intitulé du poste occupé."},
                             "INTITULE_PROJET": {"type": "string", "description": "Intitulé du projet réalisé."},
                             "DETAILS_PROJET": {"type": "string", "description": "Informations supplémentaires tel que le budget, les effectifs et les heures sans accident"},
