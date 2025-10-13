@@ -143,6 +143,7 @@ def extract_info_from_cv(cv_text):
             "properties": {
                 "PRENOM": {"type": "string", "description": "prénom"},
                 "NOM": {"type": "string", "description": "nom"},
+                "EMAIL": {"type": "string", "description": "Adresse email"},
                 "INTITULE_DU_POSTE": {"type": "string", "description": "L'intitulé du poste recherché."},
                 "EXPERTISE": {
                     "type": "array",
@@ -219,7 +220,7 @@ def extract_info_from_cv(cv_text):
                 }
             },
             "required": [
-                "INTITULE_DU_POSTE", "EXPERTISE", "SECTEUR", "METHODOLOGIE", "HABILITATION", "Projets effectués", "Diplômes", "Langues", "Formations complémentaires"
+                "INTITULE_DU_POSTE", "EXPERTISE", "SECTEUR", "METHODOLOGIE", "HABILITATION", "Projets effectués", "Diplômes", "Langues", "Formations complémentaires", "EMAIL"
             ]
         }
     }
@@ -263,12 +264,7 @@ def extract_info_from_cv(cv_text):
     else:
         info["TELEPHONE"] = ""
 
-    # Extraire l'email via regex sur le texte du CV
-    email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', cv_text)
-    if email_match:
-        info["EMAIL"] = email_match.group(0)
-    else:
-        info["EMAIL"] = ""
+    # L'email est maintenant extrait par l'API et présent dans info["EMAIL"]
 
     return info
 
