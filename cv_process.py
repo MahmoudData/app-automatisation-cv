@@ -251,7 +251,7 @@ def extract_info_from_cv(cv_text):
     info["TRI"] = generate_trigramme(prenom, nom)
 
     # Extraire l'âge via regex sur le texte du CV
-    age_match = re.search(r'(\d{2})\s*ans', cv_text, re.IGNORECASE)
+    age_match = re.search(r"(\d{2})\s*ans(?!\s*d['’]?\s*exp)", cv_text, re.IGNORECASE)
     if age_match:
         age = int(age_match.group(1))
         current_year = datetime.now().year
