@@ -118,8 +118,10 @@ def generate_trigramme(prenom, nom):
     """
     prenom = prenom.strip().upper() if prenom else ""
     nom = nom.strip().upper() if nom else ""
+    # Enlever les espaces pour les noms composés
+    nom_sans_espace = nom.replace(" ", "")
     first_letter = prenom[0] if prenom else ""
-    consonnes = re.sub(r'[AEIOUY]', '', nom)
+    consonnes = re.sub(r'[AEIOUY]', '', nom_sans_espace)
     trigramme = first_letter + consonnes[:2]
     return trigramme
     
@@ -245,6 +247,7 @@ def extract_info_from_cv(cv_text):
     # Générer le trigramme localement
     prenom = info.get("PRENOM", "")
     nom = info.get("NOM", "")
+    info["NOM"] = nom.upper()  # Forcer le nom en majuscule
     info["TRI"] = generate_trigramme(prenom, nom)
 
     # Extraire l'âge via regex sur le texte du CV
@@ -260,7 +263,14 @@ def extract_info_from_cv(cv_text):
     # Extraire le téléphone via regex sur le texte du CV
     tel_match = re.search(r'(\d{2}(?:[\s\.-]?\d{2}){4})', cv_text)
     if tel_match:
-        info["TELEPHONE"] = tel_match.group(1)
+        # Nettoyer le numéro pour enlever espaces, tirets, points
+        raw_tel = tel_match.group(1)
+        digits = re.sub(r'[^0-9]', '', raw_tel)
+        # Reformater en XX.XX.XX.XX.XX
+        if len(digits) == 10:
+            info["TELEPHONE"] = '.'.join([digits[i:i+2] for i in range(0, 10, 2)])
+        else:
+            info["TELEPHONE"] = raw_tel
     else:
         info["TELEPHONE"] = ""
 
