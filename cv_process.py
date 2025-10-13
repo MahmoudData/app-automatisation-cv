@@ -1,3 +1,4 @@
+
 from docx import Document
 import openai
 import json
@@ -8,6 +9,9 @@ from docx.shared import Inches  # Pour définir les positions en pouces
 import docx2txt
 import streamlit as st
 import tempfile
+import re
+from datetime import datetime
+
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
@@ -93,14 +97,31 @@ def read_cv(file_path=None, file_content=None, file_name=None):
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                 tmp_file.write(file_content)
                 tmp_file.flush()
-                text = extract_text_from_pdf(tmp_file.name)
-                os.unlink(tmp_file.name)
-                return text
+                tmp_file_path = tmp_file.name
+
+            # Ouvre le fichier PDF et extrait le texte
+            with open(tmp_file_path, "rb") as f:
+                text = extract_text_from_pdf(f)
+
+            os.unlink(tmp_file_path)
+            return text
         else:
             return "Type de fichier non pris en charge. Veuillez fournir un fichier .docx ou .pdf."
     
     else:
         return "Paramètres insuffisants pour lire le fichier."
+    
+def generate_trigramme(prenom, nom):
+    """
+    Génère le trigramme : première lettre du prénom + deux premières consonnes du nom.
+    Exemple : Cédric GOBERT -> CGB
+    """
+    prenom = prenom.strip().upper() if prenom else ""
+    nom = nom.strip().upper() if nom else ""
+    first_letter = prenom[0] if prenom else ""
+    consonnes = re.sub(r'[AEIOUY]', '', nom)
+    trigramme = first_letter + consonnes[:2]
+    return trigramme
     
 
 def extract_info_from_cv(cv_text):
@@ -113,12 +134,15 @@ def extract_info_from_cv(cv_text):
     Retourne :
         dict : Un dictionnaire JSON contenant les informations extraites.
     """
-    # Définition du schéma pour Function Calling
+
+    # Définition du schéma pour Function Calling (sans TRI)
     function_schema = {
         "name": "extract_cv_info",
         "parameters": {
             "type": "object",
             "properties": {
+                "PRENOM": {"type": "string", "description": "prénom"},
+                "NOM": {"type": "string", "description": "nom"},
                 "INTITULE_DU_POSTE": {"type": "string", "description": "L'intitulé du poste recherché."},
                 "EXPERTISE": {
                     "type": "array",
@@ -200,7 +224,6 @@ def extract_info_from_cv(cv_text):
         }
     }
 
-
     # Appel à l'API OpenAI avec Function Calling
     response = openai.chat.completions.create(
         model="gpt-5",
@@ -216,14 +239,44 @@ def extract_info_from_cv(cv_text):
     arguments = response.choices[0].message.function_call.arguments
 
     # Convertir la chaîne JSON en dictionnaire Python
-    return json.loads(arguments)
+    info = json.loads(arguments)
 
+    # Générer le trigramme localement
+    prenom = info.get("PRENOM", "")
+    nom = info.get("NOM", "")
+    info["TRI"] = generate_trigramme(prenom, nom)
+
+    # Extraire l'âge via regex sur le texte du CV
+    age_match = re.search(r'(\d{2})\s*ans', cv_text, re.IGNORECASE)
+    if age_match:
+        age = int(age_match.group(1))
+        current_year = datetime.now().year
+        annee_naissance = current_year - age
+        info["ANNEE"] = annee_naissance
+    else:
+        info["ANNEE"] = ""
+
+    # Extraire le téléphone via regex sur le texte du CV
+    tel_match = re.search(r'(\d{2}(?:[\s\.-]?\d{2}){4})', cv_text)
+    if tel_match:
+        info["TELEPHONE"] = tel_match.group(1)
+    else:
+        info["TELEPHONE"] = ""
+
+    # Extraire l'email via regex sur le texte du CV
+    email_match = re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', cv_text)
+    if email_match:
+        info["EMAIL"] = email_match.group(0)
+    else:
+        info["EMAIL"] = ""
+
+    return info
 
 
 def fill_word_template_with_lists(template_path, output_path, data):
     """
-    Remplit un modèle Word avec des données, en remplaçant les placeholders
-    et en appliquant un style spécifique si nécessaire.
+    Remplit un modèle Word avec des données (y compris dans l'en-tête),
+    en remplaçant les placeholders et en appliquant les styles nécessaires.
 
     Arguments :
         template_path (str) : Chemin vers le modèle Word.
@@ -232,113 +285,114 @@ def fill_word_template_with_lists(template_path, output_path, data):
     """
     doc = Document(template_path)
 
+    # --- 🔹 1. Gestion des en-têtes et pieds de page ---
+    for section in doc.sections:
+        header = section.header
+        footer = section.footer
+
+        # En-tête
+        for paragraph in header.paragraphs:
+            for key, value in data.items():
+                placeholder = f"{{{{{key}}}}}"
+                if placeholder in paragraph.text:
+                    paragraph.text = paragraph.text.replace(placeholder, str(value))
+
+        # Pied de page (optionnel, même logique)
+        for paragraph in footer.paragraphs:
+            for key, value in data.items():
+                placeholder = f"{{{{{key}}}}}"
+                if placeholder in paragraph.text:
+                    paragraph.text = paragraph.text.replace(placeholder, str(value))
+
+    # --- 🔹 2. Corps du document ---
     for paragraph in doc.paragraphs:
         for key, value in data.items():
             placeholder = f"{{{{{key}}}}}"  # Placeholder au format {{KEY}}
 
-            # Gestion des projets effectués
+            # --- Projets effectués ---
             if key == "Projets effectués" and isinstance(value, list):
                 if placeholder in paragraph.text:
-                    paragraph.text = ""  
-
-                    for projet in value:  
+                    paragraph.text = ""
+                    for projet in value:
                         client_nom = projet.get('CLIENT_NOM', 'Non spécifié')
                         dates = f"{projet.get('DATE_DEBUT', 'N/A')} - {projet.get('DATE_FIN', 'N/A')}"
-
-                        # Ajouter le texte avec tabulation
                         client_date_line = f"{client_nom}\t{dates}"
+
                         client_date_paragraph = paragraph.insert_paragraph_before(client_date_line)
-                        client_date_paragraph.style = "italique gras" 
+                        client_date_paragraph.style = "italique gras"
 
-                        # Ajouter un tab stop aligné à droite
                         tab_stops = client_date_paragraph.paragraph_format.tab_stops
-                        tab_stop = tab_stops.add_tab_stop(Inches(6.5)) 
-                        tab_stop.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT  
+                        tab_stop = tab_stops.add_tab_stop(Inches(6.5))
+                        tab_stop.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
 
-                        # Ajout du titre de poste
-                        post_paragraph = paragraph.insert_paragraph_before(f"{projet.get('INTITULE_POSTE', 'Non spécifié')}")
-                        post_paragraph.style = paragraph.style  
+                        post_paragraph = paragraph.insert_paragraph_before(projet.get('INTITULE_POSTE', 'Non spécifié'))
+                        post_paragraph.style = paragraph.style
 
-                        # Saut de ligne après le poste
-                        paragraph.insert_paragraph_before("")  
+                        paragraph.insert_paragraph_before("")
 
-                        # Ajout du projet en gras
-                        project_paragraph = paragraph.insert_paragraph_before(f"{projet.get('INTITULE_PROJET', 'Non spécifié')}")
-                        project_paragraph.style = paragraph.style  
-                        project_paragraph.runs[0].bold = True  
+                        project_paragraph = paragraph.insert_paragraph_before(projet.get('INTITULE_PROJET', 'Non spécifié'))
+                        project_paragraph.style = paragraph.style
+                        project_paragraph.runs[0].bold = True
 
-                        # Ajout de details du projet
                         details_projet = projet.get('DETAILS_PROJET', '').strip()
-                        if details_projet:  
+                        if details_projet:
                             project_paragraph = paragraph.insert_paragraph_before(details_projet)
-                            project_paragraph.style = paragraph.style 
+                            project_paragraph.style = paragraph.style
 
-                        # Saut de ligne après le projet
-                        paragraph.insert_paragraph_before("")  
+                        paragraph.insert_paragraph_before("")
 
-                        # Récupérer les réalisations
                         realizations = projet.get('REALISATION', [])
-
-                        # Vérifier si des réalisations existent avant d'ajouter quoi que ce soit
-                        if realizations:  # Si le champ n'est pas vide
-                            # Ajouter le titre "Réalisations :" en gras avant les réalisations
+                        if realizations:
                             realizations_paragraph = paragraph.insert_paragraph_before("Réalisations :")
-                            realizations_paragraph.style = paragraph.style  
-                            realizations_paragraph.runs[0].bold = True  
+                            realizations_paragraph.style = paragraph.style
+                            realizations_paragraph.runs[0].bold = True
 
-                            # Ajouter les réalisations sous forme de bullet points
                             for realization in realizations:
-                                realization = realization.strip()  
-                                if realization:  
+                                realization = realization.strip()
+                                if realization:
                                     realization_paragraph = paragraph.insert_paragraph_before(realization)
-                                    realization_paragraph.style = "Liste à puces1"  
-                            paragraph.insert_paragraph_before("") 
+                                    realization_paragraph.style = "Liste à puces1"
 
-            # Gestion des diplômes
+                            paragraph.insert_paragraph_before("")
+
+            # --- Diplômes ---
             elif key == "Diplômes" and isinstance(value, list):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for diplome in value:
-                        diploma_line = (
-                            f"{diplome.get('ANNEE_DIPLOME', 'N/A')}    {diplome.get('INTITULE_DIPLOME', 'Non spécifié')}"
-                        )
+                        diploma_line = f"{diplome.get('ANNEE_DIPLOME', 'N/A')}    {diplome.get('INTITULE_DIPLOME', 'Non spécifié')}"
                         diploma_paragraph = paragraph.insert_paragraph_before(diploma_line)
                         diploma_paragraph.style = paragraph.style
 
-            # Gestion des langues
+            # --- Langues ---
             elif key == "Langues" and isinstance(value, list):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for langue in value:
-                        language_line = (
-                            f"{langue.get('LANGUE', 'Non spécifié')}    {langue.get('NIVEAU', 'Non spécifié')}"
-                        )
+                        language_line = f"{langue.get('LANGUE', 'Non spécifié')}    {langue.get('NIVEAU', 'Non spécifié')}"
                         language_paragraph = paragraph.insert_paragraph_before(language_line)
-                        language_paragraph.style = paragraph.style 
+                        language_paragraph.style = paragraph.style
 
-            # Gestion des formations complémentaires
+            # --- Formations complémentaires ---
             elif key == "Formations complémentaires" and isinstance(value, list):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for formation in value:
-                        formation_line = (
-                            f"{formation.get('ANNEE_FORMATION', 'N/A')}    {formation.get('INTITULE_FORMATION', 'Non spécifié')}"
-                        )
+                        formation_line = f"{formation.get('ANNEE_FORMATION', 'N/A')}    {formation.get('INTITULE_FORMATION', 'Non spécifié')}"
                         formation_paragraph = paragraph.insert_paragraph_before(formation_line)
                         formation_paragraph.style = paragraph.style
 
-            # Gestion des listes pour d'autres sections
+            # --- Listes génériques ---
             elif isinstance(value, list):
                 if placeholder in paragraph.text:
-                    paragraph.text = ""  # Efface le placeholder
+                    paragraph.text = ""
                     for item in value:
                         list_paragraph = paragraph.insert_paragraph_before(str(item))
-                        list_paragraph.style = paragraph.style  
+                        list_paragraph.style = paragraph.style
 
-            # Gestion des textes simples
+            # --- Valeurs simples ---
             elif placeholder in paragraph.text:
                 paragraph.text = paragraph.text.replace(placeholder, str(value))
 
-    # Sauvegarder le fichier Word rempli
+    # --- 🔹 3. Sauvegarde du fichier final ---
     doc.save(output_path)
-   
