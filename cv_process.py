@@ -11,9 +11,14 @@ import streamlit as st
 import tempfile
 import re
 from datetime import datetime
+from pydantic import BaseModel, Field
+from typing import List
+from openai import OpenAI
 
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+client = OpenAI()
 
 
 def extract_text_from_docx(file_content=None, file_path=None):
@@ -126,7 +131,47 @@ def generate_trigramme(prenom, nom):
     return trigramme
     
 
-def extract_info_from_cv(cv_text):
+class Projet(BaseModel):
+    CLIENT_NOM: str = Field(..., description="Nom du client.")
+    DATE_DEBUT: str = Field(..., description="Date de début du projet au format MM/AAAA.")
+    DATE_FIN: str = Field(..., description="Date de fin du projet au format MM/AAAA.")
+    INTITULE_POSTE: str = Field(..., description="Intitulé du poste occupé.")
+    INTITULE_PROJET: str = Field(..., description="Intitulé du projet réalisé.")
+    DETAILS_PROJET: str = Field(None, description="Informations supplémentaires tel que le budget, les effectifs et les heures sans accident")
+    REALISATION: List[str] = Field(..., description="Réalisations principales du projet.")
+
+
+class Diplome(BaseModel):
+    ANNEE_DIPLOME: str = Field(..., description="Année d'obtention du diplôme.")
+    INTITULE_DIPLOME: str = Field(..., description="Intitulé complet du diplôme obtenu.")
+
+
+class Langue(BaseModel):
+    LANGUE: str = Field(..., description="Nom de la langue parlée.")
+    NIVEAU: str = Field(..., description="Niveau de maîtrise de la langue (exemple : Courant, Intermédiaire).")
+
+
+class FormationComplementaire(BaseModel):
+    ANNEE_FORMATION: str = Field(..., description="Année de la formation complémentaire.")
+    INTITULE_FORMATION: str = Field(..., description="Intitulé complet de la formation complémentaire.")
+
+
+class CVInfo(BaseModel):
+    PRENOM: str = Field(..., description="prénom")
+    NOM: str = Field(..., description="nom")
+    EMAIL: str = Field(..., description="Adresse email")
+    INTITULE_DU_POSTE: str = Field(..., description="L'intitulé du poste recherché.")
+    EXPERTISE: List[str] = Field(..., description="Les activités et compétences spécifiques (par exemple, Etude de constructibilité, Résolution des problématiques, Leadership).")
+    SECTEUR: List[str] = Field(..., description="Les domaines principaux d'expertise (par exemple, Bâtiment, Industrie, Oil & Gas).")
+    METHODOLOGIE: List[str] = Field(..., description="Les méthodologies et outils maîtrisés (par exemple, Pack office, MS Project, Naviswork).")
+    HABILITATION: List[str] = Field(..., description="Les habilitations professionnelles spécifiques (par exemple, GIES 1/2, Elf Gabon HS3).")
+    Projets_effectués: List[Projet] = Field(..., description="Liste des projets effectués avec les détails de chaque mission.")
+    Diplômes: List[Diplome] = Field(..., description="Liste des diplômes obtenus.")
+    Langues: List[Langue] = Field(..., description="Langues parlées avec leur niveau de maîtrise.")
+    Formations_complémentaires: List[FormationComplementaire] = Field(..., description="Formations complémentaires suivies.")
+
+
+def extract_info_from_cv(cv_text: str) -> CVInfo:
     """
     Extrait des informations structurées à partir d'un texte de CV en utilisant l'API OpenAI.
     
@@ -134,115 +179,19 @@ def extract_info_from_cv(cv_text):
         cv_text (str) : Contenu textuel du CV.
 
     Retourne :
-        dict : Un dictionnaire JSON contenant les informations extraites.
+        CVInfo : Un objet Pydantic contenant les informations extraites.
     """
-
-    # Définition du schéma pour Function Calling (sans TRI)
-    function_schema = {
-        "name": "extract_cv_info",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "PRENOM": {"type": "string", "description": "prénom"},
-                "NOM": {"type": "string", "description": "nom"},
-                "EMAIL": {"type": "string", "description": "Adresse email"},
-                "INTITULE_DU_POSTE": {"type": "string", "description": "L'intitulé du poste recherché."},
-                "EXPERTISE": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Les activités et compétences spécifiques (par exemple, Etude de constructibilité, Résolution des problématiques, Leadership)."
-                },
-                "SECTEUR": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Les domaines principaux d'expertise (par exemple, Bâtiment, Industrie, Oil & Gas)."
-                },
-                "METHODOLOGIE": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Les méthodologies et outils maîtrisés (par exemple, Pack office, MS Project, Naviswork)."
-                },
-                "HABILITATION": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Les habilitations professionnelles spécifiques (par exemple, GIES 1/2, Elf Gabon HS3)."
-                },
-                "Projets effectués": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "CLIENT_NOM": {"type": "string", "description": "Nom du client."},
-                            "DATE_DEBUT": {"type": "string", "description": "Date de début du projet au format MM/AAAA."},
-                            "DATE_FIN": {"type": "string", "description": "Date de fin du projet au format MM/AAAA."},
-                            "INTITULE_POSTE": {"type": "string", "description": "Intitulé du poste occupé."},
-                            "INTITULE_PROJET": {"type": "string", "description": "Intitulé du projet réalisé."},
-                            "DETAILS_PROJET": {"type": "string", "description": "Informations supplémentaires tel que le budget, les effectifs et les heures sans accident"},
-                            "REALISATION": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "Réalisations principales du projet."
-                            }
-                        },
-                        "required": ["CLIENT_NOM", "DATE_DEBUT", "DATE_FIN", "INTITULE_POSTE", "INTITULE_PROJET", "REALISATION"]
-                    }
-                },
-                "Diplômes": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "ANNEE_DIPLOME": {"type": "string", "description": "Année d'obtention du diplôme."},
-                            "INTITULE_DIPLOME": {"type": "string", "description": "Intitulé complet du diplôme obtenu."}
-                        },
-                        "required": ["ANNEE_DIPLOME", "INTITULE_DIPLOME"]
-                    }
-                },
-                "Langues": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "LANGUE": {"type": "string", "description": "Nom de la langue parlée."},
-                            "NIVEAU": {"type": "string", "description": "Niveau de maîtrise de la langue (exemple : Courant, Intermédiaire)."}
-                        },
-                        "required": ["LANGUE", "NIVEAU"]
-                    }
-                },
-                "Formations complémentaires": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "ANNEE_FORMATION": {"type": "string", "description": "Année de la formation complémentaire."},
-                            "INTITULE_FORMATION": {"type": "string", "description": "Intitulé complet de la formation complémentaire."}
-                        },
-                        "required": ["ANNEE_FORMATION", "INTITULE_FORMATION"]
-                    }
-                }
-            },
-            "required": [
-                "INTITULE_DU_POSTE", "EXPERTISE", "SECTEUR", "METHODOLOGIE", "HABILITATION", "Projets effectués", "Diplômes", "Langues", "Formations complémentaires", "EMAIL"
-            ]
-        }
-    }
-
-    # Appel à l'API OpenAI avec Function Calling
-    response = openai.chat.completions.create(
+    completion = client.chat.completions.parse(
         model="gpt-5",
         messages=[
             {"role": "system", "content": "Tu es un assistant qui aide à extraire les informations des CV."},
-            {"role": "user", "content": cv_text}
+            {"role": "user", "content": cv_text},
         ],
-        functions=[function_schema],
-        function_call={"name": "extract_cv_info"}
+        response_format=CVInfo,  
     )
 
-    # Accéder directement aux arguments sous forme de chaîne JSON
-    arguments = response.choices[0].message.function_call.arguments
-
-    # Convertir la chaîne JSON en dictionnaire Python
-    info = json.loads(arguments)
+    parsed: CVInfo = completion.choices[0].message.parsed
+    info = parsed.model_dump()
 
     # Générer le trigramme localement
     prenom = info.get("PRENOM", "")
@@ -273,8 +222,6 @@ def extract_info_from_cv(cv_text):
             info["TELEPHONE"] = raw_tel
     else:
         info["TELEPHONE"] = ""
-
-    # L'email est maintenant extrait par l'API et présent dans info["EMAIL"]
 
     return info
 
@@ -316,7 +263,7 @@ def fill_word_template_with_lists(template_path, output_path, data):
             placeholder = f"{{{{{key}}}}}"  # Placeholder au format {{KEY}}
 
             # --- Projets effectués ---
-            if key == "Projets effectués" and isinstance(value, list):
+            if key == "Projets_effectués" and isinstance(value, list):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for projet in value:
@@ -380,7 +327,7 @@ def fill_word_template_with_lists(template_path, output_path, data):
                         language_paragraph.style = paragraph.style
 
             # --- Formations complémentaires ---
-            elif key == "Formations complémentaires" and isinstance(value, list):
+            elif key == "Formations_complémentaires" and isinstance(value, list):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for formation in value:
