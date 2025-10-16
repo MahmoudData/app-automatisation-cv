@@ -17,6 +17,7 @@ env/
 *.pdf
 *.docx
 !template_cv_p.docx
+!template_cv_p_en.docx
 uploads/
 output/
 temp/
