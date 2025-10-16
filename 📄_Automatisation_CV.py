@@ -47,7 +47,7 @@ if uploaded_cv is not None and template_path:
 
                     output_path = f"{uploaded_cv.name.split('.')[0]}_parlym.docx"
 
-                    fill_word_template_with_lists(template_path, output_path, extracted_info)
+                    fill_word_template_with_lists(template_path, output_path, extracted_info, language=langue)
 
                     st.success(f"Fichier généré avec succès : {output_path}")
 

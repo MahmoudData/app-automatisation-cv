@@ -239,7 +239,7 @@ def extract_info_from_cv(cv_text: str, language: str = "fr") -> CVInfo:
     return info
 
 
-def fill_word_template_with_lists(template_path, output_path, data):
+def fill_word_template_with_lists(template_path, output_path, data, language="fr"):
     """
     Remplit un modèle Word avec des données (y compris dans l'en-tête),
     en remplaçant les placeholders et en appliquant les styles nécessaires.
@@ -309,7 +309,8 @@ def fill_word_template_with_lists(template_path, output_path, data):
 
                         realizations = projet.get('REALISATION') or []
                         if realizations:
-                            realizations_paragraph = paragraph.insert_paragraph_before("Réalisations :")
+                            title_realizations = "Réalisations :" if language == "fr" else "Achievements :"
+                            realizations_paragraph = paragraph.insert_paragraph_before(title_realizations)
                             realizations_paragraph.style = paragraph.style
                             realizations_paragraph.runs[0].bold = True
 
