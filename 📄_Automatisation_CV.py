@@ -10,9 +10,16 @@ logo = Image.open("parlym_logo.png")
 
 st.image(logo, width=300)
 
-template_path = "template_cv_p.docx"
-
 st.title("Traitement Automatique des CV")
+
+# Sélection de la langue
+langue = st.selectbox("Choisissez la langue de génération", ["fr", "en"], format_func=lambda x: "Français" if x == "fr" else "Anglais")
+
+# Choix du template selon la langue
+if langue == "en":
+    template_path = "template_cv_p_en.docx"
+else:
+    template_path = "template_cv_p.docx"
 
 # Sélection du fichier CV
 uploaded_cv = st.file_uploader("Téléchargez le fichier CV (PDF ou Word)", type=["docx", "pdf"])
@@ -35,7 +42,8 @@ if uploaded_cv is not None and template_path:
                 cv_content = read_cv(file_content=file_content, file_name=file_name)
                 
                 if cv_content and not cv_content.startswith("Type de fichier non pris en charge"):
-                    extracted_info = extract_info_from_cv(cv_content)
+
+                    extracted_info = extract_info_from_cv(cv_content, language=langue)
 
                     output_path = f"{uploaded_cv.name.split('.')[0]}_parlym.docx"
 
