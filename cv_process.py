@@ -1,4 +1,3 @@
-
 from docx import Document
 import openai
 import json
@@ -19,6 +18,13 @@ from openai import OpenAI
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 client = OpenAI()
+
+def clean_xml_string(s):
+    """Nettoie une chaîne pour qu'elle soit compatible XML (Word)."""
+    if not isinstance(s, str):
+        return s
+    # Supprime les caractères de contrôle et NULL
+    return ''.join(c for c in s if c >= ' ' and c != '\x00')
 
 
 def extract_text_from_docx(file_content=None, file_path=None):
@@ -171,7 +177,7 @@ class CVInfo(BaseModel):
     Formations_complémentaires: List[FormationComplementaire] = Field(..., description="Formations complémentaires suivies.")
 
 
-def extract_info_from_cv(cv_text: str) -> CVInfo:
+def extract_info_from_cv(cv_text: str, language: str = "fr") -> CVInfo:
     """
     Extrait des informations structurées à partir d'un texte de CV en utilisant l'API OpenAI.
     
@@ -181,10 +187,17 @@ def extract_info_from_cv(cv_text: str) -> CVInfo:
     Retourne :
         CVInfo : Un objet Pydantic contenant les informations extraites.
     """
+    system_prompt = {
+        "fr": "Tu es un assistant qui aide à extraire les informations des CV.",
+        "en": "You are an assistant that helps extract information from resumes. Extract the required fields in english."
+    }
+
+    system_prompt = system_prompt.get(language, system_prompt["fr"])
+    
     completion = client.chat.completions.parse(
         model="gpt-5",
         messages=[
-            {"role": "system", "content": "Tu es un assistant qui aide à extraire les informations des CV."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": cv_text},
         ],
         response_format=CVInfo,  
@@ -248,16 +261,16 @@ def fill_word_template_with_lists(template_path, output_path, data):
             for key, value in data.items():
                 placeholder = f"{{{{{key}}}}}"
                 if placeholder in paragraph.text:
-                    paragraph.text = paragraph.text.replace(placeholder, str(value))
+                    paragraph.text = paragraph.text.replace(placeholder, clean_xml_string(str(value)))
 
         # Pied de page (optionnel, même logique)
         for paragraph in footer.paragraphs:
             for key, value in data.items():
                 placeholder = f"{{{{{key}}}}}"
                 if placeholder in paragraph.text:
-                    paragraph.text = paragraph.text.replace(placeholder, str(value))
+                    paragraph.text = paragraph.text.replace(placeholder, clean_xml_string(str(value)))
 
-    # --- 🔹 2. Corps du document ---
+
     for paragraph in doc.paragraphs:
         for key, value in data.items():
             placeholder = f"{{{{{key}}}}}"  # Placeholder au format {{KEY}}
@@ -267,8 +280,8 @@ def fill_word_template_with_lists(template_path, output_path, data):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for projet in value:
-                        client_nom = projet.get('CLIENT_NOM', 'Non spécifié')
-                        dates = f"{projet.get('DATE_DEBUT', 'N/A')} - {projet.get('DATE_FIN', 'N/A')}"
+                        client_nom = clean_xml_string(projet.get('CLIENT_NOM') or 'Non spécifié')
+                        dates = clean_xml_string(f"{(projet.get('DATE_DEBUT') or 'N/A')} - {(projet.get('DATE_FIN') or 'N/A')}")
                         client_date_line = f"{client_nom}\t{dates}"
 
                         client_date_paragraph = paragraph.insert_paragraph_before(client_date_line)
@@ -278,30 +291,30 @@ def fill_word_template_with_lists(template_path, output_path, data):
                         tab_stop = tab_stops.add_tab_stop(Inches(6.5))
                         tab_stop.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
 
-                        post_paragraph = paragraph.insert_paragraph_before(projet.get('INTITULE_POSTE', 'Non spécifié'))
+                        post_paragraph = paragraph.insert_paragraph_before(clean_xml_string(projet.get('INTITULE_POSTE') or 'Non spécifié'))
                         post_paragraph.style = paragraph.style
 
                         paragraph.insert_paragraph_before("")
 
-                        project_paragraph = paragraph.insert_paragraph_before(projet.get('INTITULE_PROJET', 'Non spécifié'))
+                        project_paragraph = paragraph.insert_paragraph_before(clean_xml_string(projet.get('INTITULE_PROJET') or 'Non spécifié'))
                         project_paragraph.style = paragraph.style
                         project_paragraph.runs[0].bold = True
 
-                        details_projet = projet.get('DETAILS_PROJET', '').strip()
+                        details_projet = clean_xml_string((projet.get('DETAILS_PROJET') or '').strip())
                         if details_projet:
                             project_paragraph = paragraph.insert_paragraph_before(details_projet)
                             project_paragraph.style = paragraph.style
 
                         paragraph.insert_paragraph_before("")
 
-                        realizations = projet.get('REALISATION', [])
+                        realizations = projet.get('REALISATION') or []
                         if realizations:
                             realizations_paragraph = paragraph.insert_paragraph_before("Réalisations :")
                             realizations_paragraph.style = paragraph.style
                             realizations_paragraph.runs[0].bold = True
 
                             for realization in realizations:
-                                realization = realization.strip()
+                                realization = clean_xml_string((realization or '').strip())
                                 if realization:
                                     realization_paragraph = paragraph.insert_paragraph_before(realization)
                                     realization_paragraph.style = "Liste à puces1"
@@ -313,7 +326,7 @@ def fill_word_template_with_lists(template_path, output_path, data):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for diplome in value:
-                        diploma_line = f"{diplome.get('ANNEE_DIPLOME', 'N/A')}    {diplome.get('INTITULE_DIPLOME', 'Non spécifié')}"
+                        diploma_line = clean_xml_string(f"{(diplome.get('ANNEE_DIPLOME') or 'N/A')}    {(diplome.get('INTITULE_DIPLOME') or 'Non spécifié')}")
                         diploma_paragraph = paragraph.insert_paragraph_before(diploma_line)
                         diploma_paragraph.style = paragraph.style
 
@@ -322,7 +335,7 @@ def fill_word_template_with_lists(template_path, output_path, data):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for langue in value:
-                        language_line = f"{langue.get('LANGUE', 'Non spécifié')}    {langue.get('NIVEAU', 'Non spécifié')}"
+                        language_line = clean_xml_string(f"{(langue.get('LANGUE') or 'Non spécifié')}    {(langue.get('NIVEAU') or 'Non spécifié')}")
                         language_paragraph = paragraph.insert_paragraph_before(language_line)
                         language_paragraph.style = paragraph.style
 
@@ -331,7 +344,7 @@ def fill_word_template_with_lists(template_path, output_path, data):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for formation in value:
-                        formation_line = f"{formation.get('ANNEE_FORMATION', 'N/A')}    {formation.get('INTITULE_FORMATION', 'Non spécifié')}"
+                        formation_line = clean_xml_string(f"{(formation.get('ANNEE_FORMATION') or 'N/A')}    {(formation.get('INTITULE_FORMATION') or 'Non spécifié')}")
                         formation_paragraph = paragraph.insert_paragraph_before(formation_line)
                         formation_paragraph.style = paragraph.style
 
@@ -340,11 +353,12 @@ def fill_word_template_with_lists(template_path, output_path, data):
                 if placeholder in paragraph.text:
                     paragraph.text = ""
                     for item in value:
-                        list_paragraph = paragraph.insert_paragraph_before(str(item))
+                        list_paragraph = paragraph.insert_paragraph_before(clean_xml_string(str(item)))
                         list_paragraph.style = paragraph.style
 
             # --- Valeurs simples ---
             elif placeholder in paragraph.text:
+                paragraph.text = paragraph.text.replace(placeholder, clean_xml_string(str(value)))
                 paragraph.text = paragraph.text.replace(placeholder, str(value))
 
     # --- 🔹 3. Sauvegarde du fichier final ---
