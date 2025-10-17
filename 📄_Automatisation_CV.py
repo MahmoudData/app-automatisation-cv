@@ -1,8 +1,9 @@
 import streamlit as st
-from cv_process import read_cv, extract_info_from_cv, fill_word_template_with_lists
+from cv_process import extract_info_from_cv, fill_word_template_with_lists, extract_text_from_file
 import os
 from PIL import Image
 import tempfile
+from pathlib import Path
 
 st.set_page_config(page_title="Automatisation CV", page_icon="📄")
 
@@ -24,6 +25,20 @@ else:
 # Sélection du fichier CV
 uploaded_cv = st.file_uploader("Téléchargez le fichier CV (PDF ou Word)", type=["docx", "pdf"])
 
+def save_uploaded_file(uploaded_file) -> str:
+    """
+    Sauvegarde le fichier uploadé temporairement.
+    
+    Args:
+        uploaded_file: Fichier uploadé par l'utilisateur
+    
+    Returns:
+        Chemin vers le fichier sauvegardé
+    """
+    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
+        tmp_file.write(uploaded_file.getvalue())
+        return tmp_file.name
+
 # Bouton pour lancer le traitement
 if uploaded_cv is not None and template_path:
     st.write(f"**Fichier sélectionné :** {uploaded_cv.name}")
@@ -31,18 +46,17 @@ if uploaded_cv is not None and template_path:
     # Bouton pour générer le fichier
     if st.button("Lancer le traitement"):
         output_path = None  # Initialiser output_path avant le bloc try
+        cv_temp_path = None  # Pour stocker le chemin temporaire
         
         with st.spinner("Traitement en cours..."):
             try:
-                # Lire le contenu du fichier uploadé
-                file_content = uploaded_cv.read()
-                file_name = uploaded_cv.name
+                # Sauvegarder le fichier uploadé temporairement
+                cv_temp_path = save_uploaded_file(uploaded_cv)
                 
-                # Extraire le texte du CV
-                cv_content = read_cv(file_content=file_content, file_name=file_name)
+                # Extraire le texte du CV en utilisant extract_text_from_file
+                cv_content = extract_text_from_file(cv_temp_path)
                 
-                if cv_content and not cv_content.startswith("Type de fichier non pris en charge"):
-
+                if cv_content:
                     extracted_info = extract_info_from_cv(cv_content, language=langue)
 
                     output_path = f"{uploaded_cv.name.split('.')[0]}_parlym.docx"
@@ -59,11 +73,20 @@ if uploaded_cv is not None and template_path:
                             file_name=output_path,
                         )
                 else:
-                    st.error(f"Erreur lors de la lecture du fichier: {cv_content}")
+                    st.error("Erreur : Impossible d'extraire le texte du fichier")
                     
+            except ValueError as ve:
+                st.error(f"Erreur de format : {str(ve)}")
             except Exception as e:
                 st.error(f"Une erreur s'est produite : {str(e)}")
             finally:
+                # Nettoyer le fichier temporaire uploadé
+                if cv_temp_path and os.path.exists(cv_temp_path):
+                    try:
+                        os.unlink(cv_temp_path)
+                    except OSError:
+                        pass
+                
                 # Nettoyer le fichier de sortie si il existe
                 if output_path and os.path.exists(output_path):
                     os.remove(output_path)
