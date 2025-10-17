@@ -2,7 +2,6 @@ from docx import Document
 import openai
 import json
 import os
-from PyPDF2 import PdfReader
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT  # Pour aligner les paragraphes
 from docx.shared import Inches  # Pour définir les positions en pouces
 import docx2txt
