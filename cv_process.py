@@ -147,7 +147,7 @@ class FormationComplementaire(BaseModel):
 class CVInfo(BaseModel):
     PRENOM: str = Field(..., description="prénom")
     NOM: str = Field(..., description="nom")
-    EMAIL: str = Field(..., description="Adresse email")
+    AGE: str = Field(..., description="âge")
     INTITULE_DU_POSTE: str = Field(..., description="L'intitulé du poste recherché.")
     EXPERTISE: List[str] = Field(..., description="Les activités et compétences spécifiques (par exemple, Etude de constructibilité, Résolution des problématiques, Leadership).")
     SECTEUR: List[str] = Field(..., description="Les domaines principaux d'expertise (par exemple, Bâtiment, Industrie, Oil & Gas).")
@@ -194,14 +194,20 @@ def extract_info_from_cv(cv_text: str, language: str = "fr") -> CVInfo:
     info["NOM"] = nom.upper()  # Forcer le nom en majuscule
     info["TRI"] = generate_trigramme(prenom, nom)
 
-    # Extraire l'âge via regex sur le texte du CV
-    age_match = re.search(r"(\d{2})\s*ans(?!\s*d['’]?\s*exp)", cv_text, re.IGNORECASE)
-    if age_match:
-        age = int(age_match.group(1))
-        current_year = datetime.now().year
-        annee_naissance = current_year - age
-        info["ANNEE"] = annee_naissance
+    # Extraire l'email via regex sur le texte du CV
+    email_match = re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", cv_text)
+    if email_match:
+        info["EMAIL"] = email_match.group(0)
     else:
+        info["EMAIL"] = ""
+
+    # Utiliser la valeur AGE extraite par l'API pour calculer l'année de naissance
+    age_str = info.get("AGE", "")
+    try:
+        age = int(age_str)
+        current_year = datetime.now().year
+        info["ANNEE"] = current_year - age
+    except (ValueError, TypeError):
         info["ANNEE"] = ""
 
     # Extraire le téléphone via regex sur le texte du CV
