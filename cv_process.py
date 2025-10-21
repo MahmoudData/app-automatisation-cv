@@ -13,6 +13,9 @@ from pydantic import BaseModel, Field
 from typing import List
 from openai import OpenAI
 import fitz  # PyMuPDF
+from PIL import Image
+import base64
+from io import BytesIO
 
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -42,9 +45,113 @@ def preprocess_text(text: str) -> str:
     return text.strip()
 
 
+def pdf_to_images_pymupdf(pdf_path: str) -> List[Image.Image]:
+    """
+    Convertit toutes les pages d'un PDF en images avec PyMuPDF.
+    Alternative qui ne nécessite PAS poppler.
+    
+    Args:
+        pdf_path: Chemin vers le fichier PDF
+        
+    Returns:
+        Liste d'images PIL, une par page
+    """
+    try:
+        doc = fitz.open(pdf_path)
+        images = []
+        
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            
+            # Convertir la page en image (pixmap)
+            # mat = fitz.Matrix(2, 2) pour augmenter la résolution (zoom x2)
+            mat = fitz.Matrix(2, 2)  # Matrice de transformation pour meilleure qualité
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Convertir pixmap en image PIL
+            img_data = pix.tobytes("png")
+            img = Image.open(BytesIO(img_data))
+            images.append(img)
+        
+        doc.close()
+        return images
+        
+    except Exception as e:
+        raise Exception(f"Erreur lors de la conversion PDF en images avec PyMuPDF: {str(e)}")
+
+
+def image_to_base64(image: Image.Image) -> str:
+    """
+    Convertit une image PIL en string base64.
+    
+    Args:
+        image: Image PIL
+        
+    Returns:
+        String base64 de l'image
+    """
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return img_str
+
+
+def extract_text_from_pdf_image(pdf_path: str) -> str:
+    """
+    Extrait le texte d'un PDF scanné (image) en utilisant GPT-4 Vision.
+    
+    Args:
+        pdf_path: Chemin vers le fichier PDF
+        
+    Returns:
+        Texte extrait du PDF
+    """
+    try:
+        images = pdf_to_images_pymupdf(pdf_path)
+        
+        messages = [
+            {
+                "role": "system",
+                "content": "Tu es un assistant qui extrait fidèlement le texte des images. Reproduis exactement le texte visible sans rien modifier, sans interprétation, mot pour mot."
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Extrais tout le texte visible dans cette/ces image(s) exactement comme il apparaît, sans rien changer ni interpréter. Si plusieurs pages, extrais le texte de chaque page dans l'ordre."
+                    }
+                ]
+            }
+        ]
+        
+        # Ajouter chaque image au message
+        for idx, image in enumerate(images):
+            img_base64 = image_to_base64(image)
+            messages[1]["content"].append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{img_base64}"
+                }
+            })
+        
+        # Appeler l'API OpenAI avec vision
+        response = client.chat.completions.create(
+            model="gpt-5",  
+            messages=messages,
+        )
+        
+        extracted_text = response.choices[0].message.content
+        return preprocess_text(extracted_text)
+        
+    except Exception as e:
+        raise Exception(f"Erreur lors de l'extraction du PDF image: {str(e)}")
+
+
 def extract_text_from_pdf(file_path: str) -> str:
     """
     Extrait le texte d'un fichier PDF avec preprocessing.
+    Si le PDF est une image scannée, utilise GPT-4 Vision comme fallback.
     
     Args:
         file_path: Chemin vers le fichier PDF
@@ -53,16 +160,26 @@ def extract_text_from_pdf(file_path: str) -> str:
         Texte extrait et nettoyé du PDF
     """
     try:
+        # Tentative d'extraction classique avec PyMuPDF
         doc = fitz.open(file_path)
         text = ""
         for page in doc:
             text += page.get_text()
         doc.close()
         
-        return preprocess_text(text)
+        cleaned_text = preprocess_text(text)
+        
+        # Vérifier si le texte extrait est vide ou presque vide
+        if len(cleaned_text.strip()) < 50:
+            return extract_text_from_pdf_image(file_path)
+        
+        return cleaned_text
         
     except Exception as e:
-        raise Exception(f"Erreur lors de l'extraction PDF: {str(e)}")
+        try:
+            return extract_text_from_pdf_image(file_path)
+        except Exception as vision_error:
+            raise Exception(f"Échec de toutes les méthodes d'extraction: {str(vision_error)}")
 
 
 def extract_text_from_word(file_path: str) -> str:
