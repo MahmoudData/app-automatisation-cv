@@ -1,5 +1,5 @@
 import streamlit as st
-from cv_process import extract_info_from_cv, fill_word_template_with_lists, extract_text_from_file
+from cv_process import extract_info_from_cv, fill_word_template_with_lists, extract_text_from_file, generate_dc_filename
 import os
 from PIL import Image
 import tempfile
@@ -59,7 +59,7 @@ if uploaded_cv is not None and template_path:
                 if cv_content:
                     extracted_info = extract_info_from_cv(cv_content, language=langue)
 
-                    output_path = f"{uploaded_cv.name.split('.')[0]}_parlym.docx"
+                    output_path = generate_dc_filename(extracted_info)
 
                     fill_word_template_with_lists(template_path, output_path, extracted_info, language=langue)
 

@@ -486,3 +486,12 @@ def fill_word_template_with_lists(template_path, output_path, data, language="fr
 
     # --- 🔹 3. Sauvegarde du fichier final ---
     doc.save(output_path)
+
+
+def generate_dc_filename(infos: dict) -> str:
+    nom = infos.get("NOM")
+    prenom = infos.get("PRENOM")
+    if nom and prenom:
+        return f"DC {nom} {prenom}.docx"
+    else:
+        return "DC.docx"
