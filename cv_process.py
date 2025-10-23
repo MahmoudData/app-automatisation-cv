@@ -263,7 +263,7 @@ class FormationComplementaire(BaseModel):
 class CVInfo(BaseModel):
     PRENOM: str = Field(..., description="prénom")
     NOM: str = Field(..., description="nom")
-    AGE: str = Field(..., description="âge")
+    AGE: int = Field(..., description="âge")
     INTITULE_DU_POSTE: str = Field(..., description="L'intitulé du poste recherché.")
     EXPERTISE: List[str] = Field(..., description="Les activités et compétences spécifiques (par exemple, Etude de constructibilité, Résolution des problématiques, Leadership).")
     SECTEUR: List[str] = Field(..., description="Les domaines principaux d'expertise (par exemple, Bâtiment, Industrie, Oil & Gas).")
@@ -304,6 +304,8 @@ def extract_info_from_cv(cv_text: str, language: str = "fr") -> CVInfo:
     parsed: CVInfo = completion.choices[0].message.parsed
     info = parsed.model_dump()
 
+    info["NOM_COMPLET"] = f"{info.get('PRENOM', '')} {info.get('NOM', '')}".strip()
+
     # Générer le trigramme localement
     prenom = info.get("PRENOM", "")
     nom = info.get("NOM", "")
@@ -343,6 +345,32 @@ def extract_info_from_cv(cv_text: str, language: str = "fr") -> CVInfo:
     return info
 
 
+def replace_in_paragraph(paragraph, placeholder, value):
+    """Remplace un placeholder dans un paragraphe sans supprimer les images."""
+    if placeholder not in paragraph.text:
+        return
+    
+    # Fusionner tout le texte des runs
+    full_text = paragraph.text
+    
+    # Si le placeholder n'est pas présent, on sort
+    if placeholder not in full_text:
+        return
+    
+    # Remplacer dans le texte complet
+    new_text = full_text.replace(placeholder, str(value))
+    
+    # Trouver le premier run de texte (pas d'image)
+    text_runs = [run for run in paragraph.runs if run.text.strip()]
+    
+    if text_runs:
+        # Mettre tout le nouveau texte dans le premier run
+        text_runs[0].text = new_text
+        # Vider les autres runs de texte
+        for run in text_runs[1:]:
+            run.text = ""
+
+
 def fill_word_template_with_lists(template_path, output_path, data, language="fr"):
     """
     Remplit un modèle Word avec des données (y compris dans l'en-tête),
@@ -355,24 +383,15 @@ def fill_word_template_with_lists(template_path, output_path, data, language="fr
     """
     doc = Document(template_path)
 
-    # --- 🔹 1. Gestion des en-têtes et pieds de page ---
+    # --- 🔹 1. Gestion des en-têtes ---
     for section in doc.sections:
         header = section.header
-        footer = section.footer
 
         # En-tête
         for paragraph in header.paragraphs:
             for key, value in data.items():
                 placeholder = f"{{{{{key}}}}}"
-                if placeholder in paragraph.text:
-                    paragraph.text = paragraph.text.replace(placeholder, str(value))
-
-        # Pied de page (optionnel, même logique)
-        for paragraph in footer.paragraphs:
-            for key, value in data.items():
-                placeholder = f"{{{{{key}}}}}"
-                if placeholder in paragraph.text:
-                    paragraph.text = paragraph.text.replace(placeholder, str(value))
+                replace_in_paragraph(paragraph, placeholder, value)
 
 
     for paragraph in doc.paragraphs:
