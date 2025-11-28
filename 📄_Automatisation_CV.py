@@ -4,6 +4,8 @@ import os
 from PIL import Image
 import tempfile
 from pathlib import Path
+from cv_process_inter import extract_info_from_cv_inter, generate_cv_inter_filename
+from generator_inter import fill_cv_inter_template
 
 st.set_page_config(page_title="Automatisation CV", page_icon="📄")
 
@@ -13,14 +15,23 @@ st.image(logo, width=300)
 
 st.title("Traitement Automatique des CV")
 
+# Sélecteur du type de CV
+type_cv = st.selectbox("Type de DC", ["DC", "DC INTER"], format_func=lambda x: "DC" if x == "DC" else "DC INTER")
+
 # Sélection de la langue
 langue = st.selectbox("Choisissez la langue de génération", ["fr", "en"], format_func=lambda x: "Français" if x == "fr" else "Anglais")
 
-# Choix du template selon la langue
-if langue == "en":
-    template_path = "template_cv_p_en.docx"
+# Choix du template selon le type de CV et la langue
+if type_cv == "DC INTER":
+    if langue == "en":
+        template_path = "template_dc_inter_en.docx"
+    else:
+        template_path = "template_dc_inter.docx"
 else:
-    template_path = "template_cv_p.docx"
+    if langue == "en":
+        template_path = "template_cv_p_en.docx"
+    else:
+        template_path = "template_cv_p.docx"
 
 # Sélection du fichier CV
 uploaded_cv = st.file_uploader("Téléchargez le fichier CV (PDF ou Word)", type=["docx", "pdf"])
@@ -57,11 +68,16 @@ if uploaded_cv is not None and template_path:
                 cv_content = extract_text_from_file(cv_temp_path)
                 
                 if cv_content:
-                    extracted_info = extract_info_from_cv(cv_content, language=langue)
-
-                    output_path = generate_dc_filename(extracted_info)
-
-                    fill_word_template_with_lists(template_path, output_path, extracted_info, language=langue)
+                    if type_cv == "DC INTER":
+                        # Extraction IA et génération pour CV INTER
+                        extracted_info = extract_info_from_cv_inter(cv_content, language=langue)
+                        output_path = generate_cv_inter_filename(extracted_info)
+                        fill_cv_inter_template(template_path, output_path, extracted_info, language=langue)
+                    else:
+                        # Logique DC standard
+                        extracted_info = extract_info_from_cv(cv_content, language=langue)
+                        output_path = generate_dc_filename(extracted_info)
+                        fill_word_template_with_lists(template_path, output_path, extracted_info, language=langue)
 
                     st.success(f"Fichier généré avec succès : {output_path}")
 
